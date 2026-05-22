@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>用户管理测试页面</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        input, button { margin: 5px; padding: 8px; width: 200px; }
+        .message { margin-top: 10px; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+<h1>用户管理 - 浏览器数据提交测试</h1>
+
+<!-- 添加用户 -->
+<div class="section">
+    <h3>添加新用户</h3>
+    <form id="addUserForm">
+        <div>
+            <label>姓名：</label><br>
+            <input type="text" id="userName" name="userName" placeholder="请输入姓名" required>
+        </div>
+        <div>
+            <label>邮箱：</label><br>
+            <input type="email" id="email" name="email" placeholder="请输入邮箱" required>
+        </div>
+        <div>
+            <label>密码：</label><br>
+            <input type="password" id="password" name="password" placeholder="请输入密码" required>
+        </div>
+        <div>
+            <button type="button" onclick="addUser()">提交添加</button>
+            <button type="reset">重置</button>
+        </div>
+    </form>
+    <div id="addResult" class="message"></div>
+</div>
+
+<!-- 查询用户 -->
+<div class="section">
+    <h3>查询用户</h3>
+    <div>
+        <label>用户ID：</label><br>
+        <input type="number" id="queryId" placeholder="输入用户ID">
+        <button onclick="getUser()">查询</button>
+    </div>
+    <div id="userResult" class="message"></div>
+</div>
+
+<!-- 所有用户 -->
+<div class="section">
+    <h3>所有用户</h3>
+    <button onclick="getAllUsers()">刷新用户列表</button>
+    <div id="allUsers" class="message"></div>
+</div>
+
+<script>
+    // 添加用户
+    async function addUser() {
+        // 1. 获取表单数据
+        const userData = {
+            userName: document.getElementById('userName').value,
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value
+        };
+
+        // 2. 显示加载状态
+        const resultDiv = document.getElementById('addResult');
+        resultDiv.innerHTML = "正在提交...";
+        resultDiv.className = "message";
+
+        try {
+            // 3. 调用后端API
+            const response = await fetch('/user', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(userData)
+            });
+
+            // 4. 处理响应
+            if (response.ok) {
+                const result = await response.json();
+                resultDiv.innerHTML = `
+                    ✅ 添加成功！<br>
+                    用户ID: ${result.data.userId}<br>
+                    姓名: ${result.data.userName}<br>
+                    邮箱: ${result.data.email}
+                `;
+                resultDiv.className = "message success";
+
+                // 5. 清空表单
+                document.getElementById('addUserForm').reset();
+
+                // 6. 自动刷新用户列表
+                setTimeout(getAllUsers, 1000);
+            } else {
+                const error = await response.json();
+                resultDiv.innerHTML = `❌ 添加失败: ${error.message || '未知错误'}`;
+                resultDiv.className = "message error";
+            }
+        } catch (error) {
+            resultDiv.innerHTML = `❌ 网络错误: ${error.message}`;
+            resultDiv.className = "message error";
+        }
+    }
+
+    // 查询单个用户
+    async function getUser() {
+        const userId = document.getElementById('queryId').value;
+        if (!userId) {
+            alert("请输入用户ID");
+            return;
+        }
+
+        const resultDiv = document.getElementById('userResult');
+        resultDiv.innerHTML = "正在查询...";
+        resultDiv.className = "message";
+
+        try {
+            const response = await fetch(`/user/${userId}`);
+            if (response.ok) {
+                const result = await response.json();
+                resultDiv.innerHTML = `
+                    <strong>查询结果：</strong><br>
+                    <pre>${JSON.stringify(result, null, 2)}</pre>
+                `;
+                resultDiv.className = "message success";
+            } else {
+                resultDiv.innerHTML = "❌ 用户不存在或查询失败";
+                resultDiv.className = "message error";
+            }
+        } catch (error) {
+            resultDiv.innerHTML = `❌ 查询失败: ${error.message}`;
+            resultDiv.className = "message error";
+        }
+    }
+
+    // 获取所有用户
+    async function getAllUsers() {
+        const resultDiv = document.getElementById('allUsers');
+        resultDiv.innerHTML = "正在加载...";
+        resultDiv.className = "message";
+
+        try {
+            const response = await fetch('/web/all');
+            if (response.ok) {
+                const text = await response.text();
+                resultDiv.innerHTML = `<pre>${text}</pre>`;
+                resultDiv.className = "message";
+            } else {
+                resultDiv.innerHTML = "❌ 获取用户列表失败";
+                resultDiv.className = "message error";
+            }
+        } catch (error) {
+            resultDiv.innerHTML = `❌ 获取失败: ${error.message}`;
+            resultDiv.className = "message error";
+        }
+    }
+
+    // 页面加载时显示用户列表
+    window.onload = getAllUsers;
+</script>
+</body>
+</html>

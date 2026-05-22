@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI智能数据库搜索</title>
+    <style>
+        .container { max-width: 800px; margin: 20px auto; padding: 20px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        select, input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .table-selector {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .table-selector select { flex: 2; }
+        .table-selector input { flex: 2; display: none; }
+        .table-selector button { flex: 1; padding: 10px; }
+        .table-status {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+            min-height: 20px;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn-primary:hover { background: #0056b3; }
+        .loading { display: none; text-align: center; padding: 20px; }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🔍 AI数据库智能搜索</h1>
+
+    <div class="form-group">
+        <label>选择数据表</label>
+        <div class="table-selector">
+            <select id="tableSelect">
+                <option value="">请选择数据表...</option>
+                <option value="user">用户表 (user)</option>
+                <option value="product">产品表 (product)</option>
+                <option value="order">订单表 (order)</option>
+            </select>
+            <input type="text" id="customTableInput" placeholder="输入表名，如：customers">
+            <button type="button" onclick="toggleTableInput()" id="toggleBtn">
+                手动输入
+            </button>
+        </div>
+        <div class="table-status" id="tableStatus"></div>
+    </div>
+
+    <div class="form-group">
+        <label for="naturalQuery">输入自然语言查询</label>
+        <textarea id="naturalQuery" rows="3"
+                  placeholder="例如：查找年龄大于25的用户、搜索最近7天的订单..."></textarea>
+    </div>
+
+    <button class="btn-primary" onclick="performSmartSearch()">AI智能搜索</button>
+
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>AI正在思考中...</p>
+    </div>
+
+    <div id="resultArea"></div>
+</div>
+
+<script>
+    let isManualInput = false;
+    let availableTables = ['user', 'product', 'order']; // 默认表
+
+    // 页面加载时获取可用表
+    window.onload = async function() {
+        await loadAvailableTables();
+    };
+
+    // 加载数据库中的表
+    async function loadAvailableTables() {
+        try {
+            const response = await fetch('/api/ai/tables');
+            const data = await response.json();
+
+            if (data.success && data.tables) {
+                availableTables = data.tables;
+                updateTableSelect();
+            }
+        } catch (error) {
+            console.log('使用默认表列表');
+        }
+    }
+
+    // 更新下拉选择框
+    function updateTableSelect() {
+        const select = document.getElementById('tableSelect');
+        const currentValue = select.value;
+
+        // 清空选项（保留第一个提示选项）
+        select.innerHTML = '<option value="">请选择数据表...</option>';
+
+        // 添加数据库中的表
+        availableTables.forEach(table => {
+            const option = document.createElement('option');
+            option.value = table;
+            option.textContent = `${table}表 (${table})`;
+            select.appendChild(option);
+        });
+
+        // 添加自定义选项
+        const customOption = document.createElement('option');
+        customOption.value = 'custom';
+        customOption.textContent = '↪ 手动输入其他表名...';
+        select.appendChild(customOption);
+
+        // 恢复之前的选择
+        if (currentValue) {
+            select.value = currentValue;
+        }
+    }
+
+    // 切换输入模式
+    function toggleTableInput() {
+        const select = document.getElementById('tableSelect');
+        const input = document.getElementById('customTableInput');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const status = document.getElementById('tableStatus');
+
+        isManualInput = !isManualInput;
+
+        if (isManualInput) {
+            // 切换到手动输入
+            select.style.display = 'none';
+            input.style.display = 'block';
+            toggleBtn.textContent = '选择列表';
+            status.textContent = '请输入数据库中的表名';
+            input.focus();
+
+            // 如果下拉框选择了自定义选项，获取其值
+            if (select.value === 'custom') {
+                input.value = '';
+            } else if (select.value) {
+                input.value = select.value;
+            }
+        } else {
+            // 切换到下拉选择
+            select.style.display = 'block';
+            input.style.display = 'none';
+            toggleBtn.textContent = '手动输入';
+            status.textContent = '请从列表中选择或手动输入';
+
+            // 如果输入框有值，尝试在下拉框中找到对应选项
+            if (input.value) {
+                for (let option of select.options) {
+                    if (option.value === input.value) {
+                        select.value = input.value;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // 智能搜索
+    async function performSmartSearch() {
+        const query = document.getElementById('naturalQuery').value.trim();
+        let tableName;
+
+        if (isManualInput) {
+            tableName = document.getElementById('customTableInput').value.trim();
+        } else {
+            tableName = document.getElementById('tableSelect').value;
+        }
+
+        // 验证输入
+        if (!query) {
+            alert('请输入查询内容');
+            return;
+        }
+
+        if (!tableName || tableName === 'custom') {
+            alert('请选择或输入表名');
+            return;
+        }
+
+        // 表名格式验证
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName)) {
+            alert('表名格式错误！只能包含字母、数字和下划线，且不能以数字开头');
+            return;
+        }
+
+        // 检查表是否存在
+        const tableExists = await checkTableExists(tableName);
+        if (!tableExists && !confirm(`表 "${tableName}" 可能不存在，是否继续尝试？`)) {
+            return;
+        }
+
+        // 执行搜索
+        await performSearch(tableName, query);
+    }
+
+    // 检查表是否存在
+    async function checkTableExists(tableName) {
+        try {
+            const response = await fetch(`/api/ai/table-exists/${encodeURIComponent(tableName)}`);
+            const data = await response.json();
+            return data.success && data.exists;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // 执行搜索
+    async function performSearch(tableName, query) {
+        const loading = document.getElementById('loading');
+        const resultArea = document.getElementById('resultArea');
+
+        loading.style.display = 'block';
+        resultArea.innerHTML = '';
+
+        try {
+            const response = await fetch('/api/ai/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: query,
+                    tableName: tableName
+                })
+            });
+
+            const data = await response.json();
+            loading.style.display = 'none';
+
+            if (data.success) {
+                displayResults(data);
+            } else {
+                resultArea.innerHTML = `
+                        <div style="color: red; padding: 15px; background: #ffeeee; border-radius: 5px;">
+                            <strong>搜索失败：</strong>${data.error || '未知错误'}
+                        </div>
+                    `;
+            }
+        } catch (error) {
+            loading.style.display = 'none';
+            resultArea.innerHTML = `
+                    <div style="color: red; padding: 15px; background: #ffeeee; border-radius: 5px;">
+                        <strong>请求失败：</strong>${error.message}
+                    </div>
+                `;
+        }
+    }
+
+    // 显示结果
+    function displayResults(data) {
+        const resultArea = document.getElementById('resultArea');
+
+        let html = `
+                <div style="margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 5px;">
+                    <h3>✅ 搜索完成</h3>
+                    <p>找到 ${data.count || 0} 条记录</p>
+                    <div style="background: #e9ecef; padding: 10px; border-radius: 3px; margin: 10px 0;">
+                        <strong>生成的SQL：</strong><br>
+                        <code>SELECT * FROM ${data.tableName} WHERE ${data.generatedSQL || data.sql}</code>
+                    </div>
+            `;
+
+        if (data.data && data.data.length > 0) {
+            html += '<table border="1" style="width: 100%; border-collapse: collapse; margin-top: 10px;">';
+
+            // 表头
+            const headers = Object.keys(data.data[0]);
+            html += '<tr style="background: #dee2e6;">';
+            headers.forEach(h => html += `<th style="padding: 8px;">${h}</th>`);
+            html += '</tr>';
+
+            // 数据行
+            data.data.forEach(row => {
+                html += '<tr>';
+                headers.forEach(h => {
+                    const value = row[h] !== null ? row[h] : '';
+                    html += `<td style="padding: 8px;">${value}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += '</table>';
+        } else {
+            html += '<p style="color: #666; text-align: center;">没有找到匹配的记录</p>';
+        }
+
+        html += '</div>';
+        resultArea.innerHTML = html;
+    }
+
+    // 监听下拉框变化
+    document.getElementById('tableSelect').addEventListener('change', function() {
+        if (this.value === 'custom') {
+            // 用户选择了"手动输入"
+            isManualInput = true;
+            document.getElementById('customTableInput').style.display = 'block';
+            document.getElementById('tableSelect').style.display = 'none';
+            document.getElementById('toggleBtn').textContent = '选择列表';
+            document.getElementById('customTableInput').focus();
+        }
+    });
+</script>
+</body>
+</html>
